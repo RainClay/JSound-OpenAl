@@ -5,7 +5,7 @@
 
 ## 特性
 
-- **SPI 反射注册**：Fabric/Forge 类加载器不扫 `META-INF/services`，通过反射把 Provider 注入 `AudioSystem`
+- **默认 mixer 钉死**：设置 `javax.sound.sampled.*` 系统属性把默认线路固定到本桥（与 Provider 发现顺序无关）；发现本身由 ServiceLoader 走线程上下文类加载器完成
 - **独立 OpenAL 上下文**：单 worker 线程持有，不与游戏音效引擎抢资源；失败安全降级
 - **双播放路径**：`Clip`（整段上传）+ `SourceDataLine`（流式：48 buffer 轮转 + 背压队列）
 - **驱动怪癖修复**：安卓 OpenAL 的 `AL_BUFFERS_PROCESSED` 恒为 0 → 按 `inflight − driverQueued` FIFO 回收 + 8 buffer 预缓冲（消除开头沙沙声与断流死锁）
