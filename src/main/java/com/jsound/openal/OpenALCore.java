@@ -5,7 +5,6 @@ import org.lwjgl.openal.ALC;
 import org.lwjgl.openal.ALC10;
 import org.lwjgl.openal.ALCCapabilities;
 
-import java.lang.reflect.Field;
 import java.nio.IntBuffer;
 import java.util.Iterator;
 import java.util.concurrent.Callable;
@@ -197,47 +196,45 @@ public final class OpenALCore {
     }
 
     /* ------------------------------------------------------------------ */
-    /* SPI discovery fallback                                              */
+    /* Default-mixer pinning                                               */
     /* ------------------------------------------------------------------ */
 
     /**
-     * Called from the provider's static initializer. If the environment's
-     * classloader ignored {@code META-INF/services} (common under Fabric
-     * Loader / Pojav), reflectively insert our provider into AudioSystem's
-     * internal provider list so {@code AudioSystem.getSourceDataLine(...)} and
-     * {@code getClip()} find the bridge. Idempotent; does not touch OpenAL.
+     * Pins Java Sound's default mixers to this bridge via the documented
+     * system properties ("javax.sound.sampled.SourceDataLine" / "Clip" /
+     * "TargetDataLine"). AudioSystem consults these before any provider-order
+     * fallback, so default lines always come from this implementation even
+     * when a launcher ships a duplicate bridge (Zalith2 integrates one into
+     * its lwjgl jar and plain ServiceLoader discovers it first).
      *
-     * <p>The provider is <b>prepended</b>, not appended: launchers may ship
-     * their own (unfixed) JSound bridge on the system classpath — Zalith2
-     * integrates one into its lwjgl jar, which plain {@code ServiceLoader}
-     * discovers first. AudioSystem asks providers in list order, so inserting
-     * at the head guarantees this fixed implementation serves the default-line
-     * requests and the duplicate stays dormant.
+     * <p>History note: this method used to reflectively edit an
+     * {@code AudioSystem.mixers} field — which does not exist in any modern
+     * JDK, so it silently did nothing. Discovery always actually worked
+     * because {@code ServiceLoader} consults the thread context classloader,
+     * which under Forge/Fabric is the mod classloader and does see our
+     * {@code META-INF/services} file. Idempotent; does not touch OpenAL.
      */
     public static void registerFallback() {
-        try {
-            Field f = javax.sound.sampled.AudioSystem.class.getDeclaredField("mixers");
-            f.setAccessible(true);
-            javax.sound.sampled.spi.MixerProvider[] arr =
-                    (javax.sound.sampled.spi.MixerProvider[]) f.get(null);
-            if (arr == null) {
-                // AudioSystem not yet initialized: seed the field so its first
-                // getMixerInfo() sees us instead of a fresh ServiceLoader scan.
-                f.set(null, new javax.sound.sampled.spi.MixerProvider[]{new JSoundMixerProvider()});
-                return;
-            }
-            for (javax.sound.sampled.spi.MixerProvider p : arr) {
-                if (p instanceof JSoundMixerProvider) {
-                    return;
-                }
-            }
-            javax.sound.sampled.spi.MixerProvider[] copy =
-                    new javax.sound.sampled.spi.MixerProvider[arr.length + 1];
-            copy[0] = new JSoundMixerProvider();
-            System.arraycopy(arr, 0, copy, 1, arr.length);
-            f.set(null, copy);
-        } catch (Throwable t) {
-            // Reflection into internal AudioSystem failed; rely on META-INF/services.
+        pinDefaultMixer("javax.sound.sampled.SourceDataLine");
+        pinDefaultMixer("javax.sound.sampled.Clip");
+        pinDefaultMixer("javax.sound.sampled.TargetDataLine");
+    }
+
+    private static void pinDefaultMixer(String key) {
+        // Full "providerClassName#mixerName" form: AudioSystem matches the
+        // provider by class name against the already-loaded provider list and
+        // the mixer by name inside it — completely independent of the order in
+        // which ServiceLoader discovered the providers. A bare mixer name would
+        // be misparsed as a provider class name (getDefaultMixer).
+        String value = JSoundMixerProvider.class.getName() + "#" + JSoundMixer.INFO.getName();
+        String existing = System.getProperty(key);
+        // Respect an explicitly configured desktop mixer, but take priority
+        // over launcher-shipped duplicates (a competing jsound variant that
+        // copied our provider/mixer name shares the property harmlessly).
+        if (existing != null && !existing.equals(value) && !existing.contains("jsound")) {
+            Log.debug("[jsound-openal] keeping existing " + key + "=" + existing);
+            return;
         }
+        System.setProperty(key, value);
     }
 }
