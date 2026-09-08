@@ -203,9 +203,16 @@ public final class OpenALCore {
     /**
      * Called from the provider's static initializer. If the environment's
      * classloader ignored {@code META-INF/services} (common under Fabric
-     * Loader / Pojav), reflectively append our provider to AudioSystem's
+     * Loader / Pojav), reflectively insert our provider into AudioSystem's
      * internal provider list so {@code AudioSystem.getSourceDataLine(...)} and
      * {@code getClip()} find the bridge. Idempotent; does not touch OpenAL.
+     *
+     * <p>The provider is <b>prepended</b>, not appended: launchers may ship
+     * their own (unfixed) JSound bridge on the system classpath — Zalith2
+     * integrates one into its lwjgl jar, which plain {@code ServiceLoader}
+     * discovers first. AudioSystem asks providers in list order, so inserting
+     * at the head guarantees this fixed implementation serves the default-line
+     * requests and the duplicate stays dormant.
      */
     public static void registerFallback() {
         try {
@@ -226,8 +233,8 @@ public final class OpenALCore {
             }
             javax.sound.sampled.spi.MixerProvider[] copy =
                     new javax.sound.sampled.spi.MixerProvider[arr.length + 1];
-            System.arraycopy(arr, 0, copy, 0, arr.length);
-            copy[arr.length] = new JSoundMixerProvider();
+            copy[0] = new JSoundMixerProvider();
+            System.arraycopy(arr, 0, copy, 1, arr.length);
             f.set(null, copy);
         } catch (Throwable t) {
             // Reflection into internal AudioSystem failed; rely on META-INF/services.
