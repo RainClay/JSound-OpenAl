@@ -1,0 +1,7 @@
+# 构建产物（jar 请发布到 GitHub Releases）
+build/classes/
+build/*.jar
+build/_out/
+build/_test/
+build/_sources.txt
+*.bak

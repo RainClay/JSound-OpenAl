@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "jsound_openal",
+  "version": "1.0",
+  "name": "jsound-openal",
+  "description": "Java Sound (javax.sound.sampled) -> OpenAL bridge so music mods using javax.sound play on Android launchers (Pojav/Zalith)",
+  "authors": ["Rain_Clay"],
+  "license": "",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.jsound.openal.fabric.JSoundOpenalMod"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.14.0",
+    "minecraft": "*"
+  }
+}
